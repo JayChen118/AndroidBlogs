@@ -1,0 +1,1522 @@
+Android自定义View--自己撸一个柱状图也没那么难
+
+2016-12-29 Hankkin 鸿洋
+本文作者：Hankkin
+Hankkin 的博客地址：
+http://blog.csdn.net/lyhhj/
+
+>>>>
+轻松一刻
+
+http://mp.weixin.qq.com/s?__biz=MzAxMTI4MTkwNQ==&mid=2650821805&idx=1&sn=71803fec26a95baf27e3fa06d2827d5b&chksm=80b78033b7c00925b49483c2940b97e6ba77e864fea39956d6f72ff81155212ba24e12275e30&mpshare=1&scene=23&srcid=1229K1eclsZBqNY9WipgG2KG#rd
+
+http://blog.csdn.net/lyhhj/article/details/53771477
+
+
+登录 | 注册
+Hankkin的博客小园
+ 目录视图 摘要视图 订阅
+CSDN 2016博客之星评选结果公布        【系列直播】算法与游戏实战技术        “我的2016”主题征文活动
+ [置顶] Android自定义View--自己撸一个柱状图也没那么难
+标签： android开发自定义View柱状图
+2016-12-20 23:40 3462人阅读 评论(11) 收藏 举报
+ 分类： android 开发进阶（30）
+版权声明：本文为博主原创文章，转载请标明出处。
+目录(?)[+]
+本文已授权微信公众号：鸿洋（hongyangAndroid）在微信公众号平台原创首发。
+绪论
+
+*转眼间，2016伴随着互联网寒冬和帝都的雾霾马上就过去了，不知道大家今年一整年过得怎么样？最近票圈被各个城市的雾霾刷屏，
+内心难免会动荡，庆幸自己早出来一年，也担忧着自己的未来的职业规划。无所谓了，既然选择了这个行业，我觉得大家就应该坚持下去，路是自己走的，及时再寒冬，只要你足够优秀，足够努力，相信你最后还是会找到自己满意的工作的。最后还要感谢今年博客之星大家对我的投票支持，非常感谢。不多说了，今天的主题是它–对，自定义View柱状图。
+先来说说我最近在做什么吧？好久没有写博客了，最近手里有两个项目，闲的时候一直在忙着做项目，也封装了属于自己的一套Library，抽下来我会把它分享出来的。公司的项目也一直在忙，今天的柱状图就是公司的项目所用到的。先来看一下效果吧
+
+*
+
+这里写图片描述
+
+背景
+
+需求刚下来的时候我去网上找了一些开源的项目比如：
+MpChart
+hellocharts-android
+AndroidCharts
+等等有好多，但是最后为什么我选择了自定义，一来是这些开源库都很“重”,好多都用不到；二来很少有双条的柱状图；三来也想提高一下自己，仔细研究一下发现也并没有那么难。感兴趣的话可以去研究一下开源的那些图表，不过我曾经想过在上面的那几个基础上去修改，发现很难，所幸自己定义吧。
+
+具体实现
+
+可以看到，今天的柱状图分为三类：双条竖向柱状图、单条竖向柱状图以及单条横向柱状图，其实原理都是一样的，下面我们具体看一下怎么实现，怎么去画一个这样的柱状图。
+
+双条竖向
+
+我们可以看到这个柱状图主要包括下面几个方面：
+
+双条柱状图
+横坐标月份
+点击tips显示具体数值
+灰色阴影（图上没有显示具体看代码）
+柱状图渐变、圆角、点击变色
+好了上面五点就是需求和UI所提出来的所有东西，我们开始着手去“画”吧。
+
+1.首先我们定义一些资源style供使用
+
+包括
+leftColor 左侧柱状图顶部颜色
+leftColorBottom 左侧柱状图底部颜色
+rightColor 右侧柱状图顶部颜色
+rightColorBottom 右侧柱状图底部颜色
+selectRightColor 左侧点击选中颜色
+selectRightColor 右侧点击选中颜色
+xyColor 横轴字体颜色
+
+底部和顶部颜色是用于渐变用的
+
+<declare-styleable name="MyChartView">
+        <attr name="leftColor" format="color"></attr>
+        <attr name="leftColorBottom" format="color"></attr>
+        <attr name="selectLeftColor" format="color"></attr>
+        <attr name="rightColor" format="color"></attr>
+        <attr name="rightColorBottom" format="color"></attr>
+        <attr name="selectRightColor" format="color"></attr>
+        <attr name="xyColor" format="color"></attr>
+    </declare-styleable>
+1
+2
+3
+4
+5
+6
+7
+8
+9
+1
+2
+3
+4
+5
+6
+7
+8
+9
+2.接下来我们看具体代码，注释写的很详细了，仔细看：
+
+初始化属性、画笔、所用的size等
+测量计算高宽度等
+画坐标轴、画月份、画柱状图、画阴影
+柱状图渐变以及点击变色
+touch点击事件判断点击所属哪个月份，接口回调给activity显示具体月份数值
+
+注意：onWindowVisibilityChanged这个方法（当屏幕焦点变化时重新侧向起始位置,必须重写次方法,否则当焦点变化时柱状图会跑到屏幕外面）
+下面主要说一下绘制部分吧
+
+OnDraw()部分
+
+我们将每次onTouch的条的索引放到selectIndexRoles数组中，然后当这个数组包含该绘制的柱状图的索引是我们设置不用颜色以及不设置渐变；
+同时我们给每两个双条之间的的空白处绘制成阴影；
+最后drawRoundRect（）就绘制了一个圆角的矩形。
+
+//画柱状图
+        for (int i = 0; i < list.size(); i++) {
+            int size = mHeight / 120;
+            if (selectIndexRoles.contains(i)) {
+                //偶数
+                mChartPaint.setShader(null);
+                if (i % 2 == 0) {
+                    mChartPaint.setColor(selectLeftColor);
+                } else {
+                    mChartPaint.setColor(selectRightColor);
+                }
+            } else {
+                //偶数
+                if (i % 2 == 0) {
+                    LinearGradient lg = new LinearGradient(mChartWidth, mChartWidth + mSize, mHeight - 100,
+                        (float) (mHeight - 100 - list.get(i) * size), lefrColorBottom, leftColor, Shader.TileMode.MIRROR);
+                    mChartPaint.setShader(lg);
+                } else {
+                    LinearGradient lg = new LinearGradient(mChartWidth, mChartWidth + mSize, mHeight - 100,
+                        (float) (mHeight - 100 - list.get(i) * size), rightColorBottom, rightColor, Shader.TileMode.MIRROR);
+                    mChartPaint.setShader(lg);
+                }
+            }
+
+            mChartPaint.setStyle(Paint.Style.FILL);
+            //画阴影
+            if (i == number * 2 || i == number * 2 + 1) {
+                mShadowPaint.setColor(Color.BLUE);
+            } else {
+                mShadowPaint.setColor(Color.WHITE);
+            }
+
+            //画柱状图
+            RectF rectF = new RectF();
+            rectF.left = mChartWidth;
+            rectF.right = mChartWidth + mSize;
+            rectF.bottom = mHeight - 100;
+            rectF.top = (float) (mHeight - 100 - list.get(i) * size);
+            canvas.drawRoundRect(rectF, 10, 10, mChartPaint);
+            //canvas.drawRect(mChartWidth, mHeight - 100 - list.get(i) * size, mChartWidth + mSize, mHeight - 100, mChartPaint)
+            // ;// 长方形
+            mChartWidth += (i % 2 == 0) ? (3 + getWidth() / 39) : (getWidth() / 13 - 3 - mSize);
+        }
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+全部代码
+
+package com.hankkin.mycartdemo.chatview;
+
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.util.AttributeSet;
+import android.view.MotionEvent;
+import android.view.View;
+import com.hankkin.mycartdemo.R;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Created by Hankkin on 2016/12/10.
+ */
+
+public class MyChartView extends View {
+
+    private int leftColor;//双柱左侧
+    private int rightColor;//双柱右侧
+    private int lineColor;//横轴线
+    private int selectLeftColor;//点击选中左侧
+    private int selectRightColor;//点击选中右侧
+    private int lefrColorBottom;//左侧底部
+    private int rightColorBottom;//右侧底部
+    private Paint mPaint, mChartPaint, mShadowPaint;//横轴画笔、柱状图画笔、阴影画笔
+    private int mWidth, mHeight, mStartWidth, mChartWidth, mSize;//屏幕宽度高度、柱状图起始位置、柱状图宽度
+    private Rect mBound;
+    private List<Float> list = new ArrayList<>();//柱状图高度占比
+    private Rect rect;//柱状图矩形
+    private getNumberListener listener;//点击接口
+    private int number = 1000;//柱状图最大值
+    private int selectIndex = -1;//点击选中柱状图索引
+    private List<Integer> selectIndexRoles = new ArrayList<>();
+
+    public void setList(List<Float> list) {
+        this.list = list;
+        mSize = getWidth() / 39;
+        mStartWidth = getWidth() / 13;
+        mChartWidth = getWidth() / 13 - mSize - 3;
+        invalidate();
+    }
+
+    public void setListener(getNumberListener listener) {
+        this.listener = listener;
+    }
+
+    public MyChartView(Context context) {
+        this(context, null);
+    }
+
+    public MyChartView(Context context, AttributeSet attrs) {
+        this(context, attrs, 0);
+    }
+
+    public MyChartView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        //获取我们自定义的样式属性
+        TypedArray array = context.getTheme().obtainStyledAttributes(attrs, R.styleable.MyChartView, defStyleAttr, 0);
+        int n = array.getIndexCount();
+        for (int i = 0; i < n; i++) {
+            int attr = array.getIndex(i);
+            switch (attr) {
+                case R.styleable.MyChartView_leftColor:
+                    // 默认颜色设置为黑色
+                    leftColor = array.getColor(attr, Color.BLACK);
+                    break;
+                case R.styleable.MyChartView_selectLeftColor:
+                    // 默认颜色设置为黑色
+                    selectLeftColor = array.getColor(attr, Color.BLACK);
+                    break;
+                case R.styleable.MyChartView_rightColor:
+                    rightColor = array.getColor(attr, Color.BLACK);
+                    break;
+                case R.styleable.MyChartView_selectRightColor:
+                    selectRightColor = array.getColor(attr, Color.BLACK);
+                    break;
+                case R.styleable.MyChartView_xyColor:
+                    lineColor = array.getColor(attr, Color.BLACK);
+                    break;
+                case R.styleable.MyChartView_leftColorBottom:
+                    lefrColorBottom = array.getColor(attr, Color.BLACK);
+                    break;
+                case R.styleable.MyChartView_rightColorBottom:
+                    rightColorBottom = array.getColor(attr, Color.BLACK);
+                    break;
+            }
+        }
+        array.recycle();
+        init();
+    }
+
+    //初始化画笔
+    private void init() {
+        mPaint = new Paint();
+        mPaint.setAntiAlias(true);
+        mBound = new Rect();
+        mChartPaint = new Paint();
+        mChartPaint.setAntiAlias(true);
+        mShadowPaint = new Paint();
+        mShadowPaint.setAntiAlias(true);
+        mShadowPaint.setColor(Color.WHITE);
+    }
+
+    //测量高宽度
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        int width;
+        int height;
+        int widthSize = MeasureSpec.getSize(widthMeasureSpec);
+        int heightSize = MeasureSpec.getSize(heightMeasureSpec);
+        int widthMode = MeasureSpec.getMode(widthMeasureSpec);
+        int heightMode = MeasureSpec.getMode(heightMeasureSpec);
+
+        if (widthMode == MeasureSpec.EXACTLY) {
+            width = widthSize;
+        } else {
+            width = widthSize * 1 / 2;
+        }
+        if (heightMode == MeasureSpec.EXACTLY) {
+            height = heightSize;
+        } else {
+            height = heightSize * 1 / 2;
+        }
+
+        setMeasuredDimension(width, height);
+    }
+
+    //计算高度宽度
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        mWidth = getWidth();
+        mHeight = getHeight();
+        mStartWidth = getWidth() / 13;
+        mSize = getWidth() / 39;
+        mChartWidth = getWidth() / 13 - mSize;
+    }
+
+    //重写onDraw绘制
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+
+        mPaint.setColor(lineColor);
+        //画坐标轴
+        //canvas.drawLine(0, mHeight - 100, mWidth, mHeight - 100, mPaint);
+        for (int i = 0; i < 12; i++) {
+            //画刻度线
+            //canvas.drawLine(mStartWidth, mHeight - 100, mStartWidth, mHeight - 80, mPaint);
+            //画数字
+            mPaint.setTextSize(35);
+            mPaint.setTextAlign(Paint.Align.CENTER);
+            mPaint.getTextBounds(String.valueOf(i + 1) + "", 0, String.valueOf(i).length(), mBound);
+            canvas.drawText(String.valueOf(i + 1) + "月", mStartWidth - mBound.width() * 1 / 2,
+                mHeight - 60 + mBound.height() * 1 / 2, mPaint);
+            mStartWidth += getWidth() / 13;
+        }
+        //画柱状图
+        for (int i = 0; i < list.size(); i++) {
+            int size = mHeight / 120;
+            if (selectIndexRoles.contains(i)) {
+                //偶数
+                mChartPaint.setShader(null);
+                if (i % 2 == 0) {
+                    mChartPaint.setColor(selectLeftColor);
+                } else {
+                    mChartPaint.setColor(selectRightColor);
+                }
+            } else {
+                //偶数
+                if (i % 2 == 0) {
+                    LinearGradient lg = new LinearGradient(mChartWidth, mChartWidth + mSize, mHeight - 100,
+                        (float) (mHeight - 100 - list.get(i) * size), lefrColorBottom, leftColor, Shader.TileMode.MIRROR);
+                    mChartPaint.setShader(lg);
+                } else {
+                    LinearGradient lg = new LinearGradient(mChartWidth, mChartWidth + mSize, mHeight - 100,
+                        (float) (mHeight - 100 - list.get(i) * size), rightColorBottom, rightColor, Shader.TileMode.MIRROR);
+                    mChartPaint.setShader(lg);
+                }
+            }
+
+            mChartPaint.setStyle(Paint.Style.FILL);
+            //画阴影
+            if (i == number * 2 || i == number * 2 + 1) {
+                mShadowPaint.setColor(Color.BLUE);
+            } else {
+                mShadowPaint.setColor(Color.WHITE);
+            }
+
+            //画柱状图
+            RectF rectF = new RectF();
+            rectF.left = mChartWidth;
+            rectF.right = mChartWidth + mSize;
+            rectF.bottom = mHeight - 100;
+            rectF.top = (float) (mHeight - 100 - list.get(i) * size);
+            canvas.drawRoundRect(rectF, 10, 10, mChartPaint);
+            //canvas.drawRect(mChartWidth, mHeight - 100 - list.get(i) * size, mChartWidth + mSize, mHeight - 100, mChartPaint)
+            // ;// 长方形
+            mChartWidth += (i % 2 == 0) ? (3 + getWidth() / 39) : (getWidth() / 13 - 3 - mSize);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) {
+
+        }
+    }
+
+    /**
+     * 注意:
+     * 当屏幕焦点变化时重新侧向起始位置,必须重写次方法,否则当焦点变化时柱状图会跑到屏幕外面
+     */
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility == VISIBLE) {
+            mSize = getWidth() / 39;
+            mStartWidth = getWidth() / 13;
+            mChartWidth = getWidth() / 13 - mSize - 3;
+        }
+    }
+
+    /**
+     * 柱状图touch事件
+     * 获取触摸位置计算属于哪个月份的
+     * @param ev
+     * @return
+     */
+    @Override
+    public boolean onTouchEvent(MotionEvent ev) {
+
+        int x = (int) ev.getX();
+        int y = (int) ev.getY();
+        int left = 0;
+        int top = 0;
+        int right = mWidth / 12;
+        int bottom = mHeight - 100;
+        switch (ev.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                for (int i = 0; i < 12; i++) {
+                    rect = new Rect(left, top, right, bottom);
+                    left += mWidth / 12;
+                    right += mWidth / 12;
+                    if (rect.contains(x, y)) {
+                        listener.getNumber(i, x, y);
+                        number = i;
+                        selectIndex = i;
+                        selectIndexRoles.clear();
+                        ;
+                        selectIndexRoles.add(selectIndex * 2 + 1);
+                        selectIndexRoles.add(selectIndex * 2);
+                        invalidate();
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+
+                break;
+        }
+        return true;
+    }
+
+    public interface getNumberListener {
+        void getNumber(int number, int x, int y);
+    }
+
+    public int getLeftColor() {
+        return leftColor;
+    }
+
+    public void setLeftColor(int leftColor) {
+        this.leftColor = leftColor;
+    }
+
+    public int getRightColor() {
+        return rightColor;
+    }
+
+    public void setRightColor(int rightColor) {
+        this.rightColor = rightColor;
+    }
+
+    public int getLineColor() {
+        return lineColor;
+    }
+
+    public void setLineColor(int lineColor) {
+        this.lineColor = lineColor;
+    }
+
+    public int getSelectLeftColor() {
+        return selectLeftColor;
+    }
+
+    public void setSelectLeftColor(int selectLeftColor) {
+        this.selectLeftColor = selectLeftColor;
+    }
+
+    public int getSelectRightColor() {
+        return selectRightColor;
+    }
+
+    public void setSelectRightColor(int selectRightColor) {
+        this.selectRightColor = selectRightColor;
+    }
+
+    public int getLefrColorBottom() {
+        return lefrColorBottom;
+    }
+
+    public void setLefrColorBottom(int lefrColorBottom) {
+        this.lefrColorBottom = lefrColorBottom;
+    }
+
+    public int getRightColorBottom() {
+        return rightColorBottom;
+    }
+
+    public void setRightColorBottom(int rightColorBottom) {
+        this.rightColorBottom = rightColorBottom;
+    }
+}
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
+303
+304
+305
+306
+307
+308
+309
+310
+311
+312
+313
+314
+315
+316
+317
+318
+319
+320
+321
+322
+323
+324
+325
+326
+327
+328
+329
+330
+331
+332
+333
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
+303
+304
+305
+306
+307
+308
+309
+310
+311
+312
+313
+314
+315
+316
+317
+318
+319
+320
+321
+322
+323
+324
+325
+326
+327
+328
+329
+330
+331
+332
+333
+3.具体使用：
+
+private void initChatView() {
+
+        myChartView.setLefrColorBottom(getResources().getColor(R.color.leftColorBottom));
+        myChartView.setLeftColor(getResources().getColor(R.color.leftColor));
+        myChartView.setRightColor(getResources().getColor(R.color.rightColor));
+        myChartView.setRightColorBottom(getResources().getColor(R.color.rightBottomColor));
+        myChartView.setSelectLeftColor(getResources().getColor(R.color.selectLeftColor));
+        myChartView.setSelectRightColor(getResources().getColor(R.color.selectRightColor));
+        myChartView.setLineColor(getResources().getColor(R.color.xyColor));
+        chartList = new ArrayList<>();
+
+        relativeLayout = (RelativeLayout) findViewById(R.id.linearLayout);
+        relativeLayout.removeView(llChart);
+        Random random = new Random();
+        while (chartList.size() < 24) {
+            int randomInt = random.nextInt(100);
+            chartList.add((float) randomInt);
+        }
+        myChartView.setList(chartList);
+        myChartView.setListener(new MyChartView.getNumberListener() {
+            @Override
+            public void getNumber(int number, int x, int y) {
+                relativeLayout.removeView(llChart);
+                //反射加载点击柱状图弹出布局
+                llChart = (LinearLayout) LayoutInflater.from(MainActivity.this).inflate(R.layout.layout_shouru_zhichu, null);
+                TextView tvZhichu = (TextView) llChart.findViewById(R.id.tv_zhichu);
+                TextView tvShouru = (TextView) llChart.findViewById(R.id.tv_shouru);
+                tvZhichu.setText((number + 1) + "月支出" + " " + chartList.get(number * 2));
+                tvShouru.setText ( "收入: " + chartList.get(number * 2 + 1));
+                llChart.measure(0, 0);//调用该方法后才能获取到布局的宽度
+                RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT,
+                    RelativeLayout.LayoutParams.WRAP_CONTENT);
+                params.leftMargin = x - 100;
+                if (x - 100 < 0) {
+                    params.leftMargin = 0;
+                } else if (x - 100 > relativeLayout.getWidth() - llChart.getMeasuredWidth()) {
+                    //设置布局距左侧屏幕宽度减去布局宽度
+                    params.leftMargin = relativeLayout.getWidth() - llChart.getMeasuredWidth();
+                }
+                llChart.setLayoutParams(params);
+                relativeLayout.addView(llChart);
+            }
+        });
+    }
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+经过以上步骤，我们的双条竖向柱状图就绘制完成了，也显示出来了。其实自己坐下来仔细拿笔算一下，画一下，也没有想象的那么难。至于单条和横向的实现原理都一样，比这个要简单的多。哦对了，横向的我只是自定义了一个横向的柱状图View，然后用ListView显示的各个部门的具体内容。好了最后感谢我的朋友帮了我很多忙Young_Kai，大家也可以看看他的博客，很不错的。
+
+代码我已经上传我的Github，欢迎大家star，fork：
+https://github.com/Hankkin/MyCartDemo
+
+最后推荐一下老刘解析的MPChart
+
+http://blog.csdn.net/qq_26787115
+
+顶
+5
+
+踩
+0
+
+
+上一篇Android--仿淘宝商品详情(继续拖动查看详情)及标题栏渐变
+下一篇Android谈谈封装那些事--BaseActivity和BaseFragment(一)
+我的同类文章
+android 开发进阶（30）
+•Android谈谈封装那些事--BaseActivity和BaseFragment(二)2016-12-26阅读3755
+•Android--仿淘宝商品详情(继续拖动查看详情)及标题栏渐变2016-09-12阅读4536
+•Retrofit--记使用Retrofit时遇到的一个坑2016-08-02阅读3044
+•Retrofit--使用Retrofit时怎样去设置OKHttp2016-05-12阅读4968
+•Android自定义组合控件---教你如何自定义下拉刷新和左滑删除2016-04-24阅读11864
+•Android谈谈封装那些事--BaseActivity和BaseFragment(一)2016-12-25阅读3016
+•Android带你解析ScrollView--仿QQ空间标题栏渐变2016-08-03阅读6587
+•Retrofit--合理封装回调能让你的项目高逼格2016-06-20阅读6129
+•Retrofit+OKHttp 教你怎么持久化管理Cookie2016-05-08阅读15253
+•Android自定义下拉刷新动画--仿百度外卖下拉刷新2016-04-11阅读14113
+更多文章
+
+
+参考知识库
+img
+Android知识库
+28755关注|2439收录
+img
+.NET知识库
+2588关注|815收录
+img
+Java SE知识库
+19306关注|468收录
+img
+Java EE知识库
+13130关注|1215收录
+img
+微信开发知识库
+15878关注|620收录
+img
+Java 知识库
+21423关注|1436收录
+猜你在找
+威哥全套Android开发课程【基础与UI技术】【Android APP开发】Android高级商业布局快速实现Android开发—屏幕适配3G Android实战开发从入门到精通Android开发之初窥门径
+28 自定义View画坐标和柱状图自定义view之柱状图自定义view-3d柱状图Android自定义饼状图支持点击弹出扇形Android自定义控件之动态柱状图
+
+
+关闭
+
+
+查看评论
+6楼 salmanit 54分钟前发表 [回复] onLayout 里的代码应该剪切到ondraw里，这样不会出现点击一下就跑到屏幕外边的问题了。
+5楼 刘某人程序员 3天前 17:52发表 [回复] 精品，感谢分享Re: Hankkin 3天前 09:28发表 [回复] 回复刘某人程序员：感谢老刘
+4楼 欧阳鹏 2016-12-22 09:53发表 [回复] 为什么我选择了自定义，一来是这些开源库都很“重”,好多都用不到；二来很少有双条的柱状图；三来也想提高一下自己，仔细研究一下发现也并没有那么难。
+
+自己动手丰衣足食。Re: Hankkin 6天前 18:26发表 [回复] 回复欧阳鹏：恩恩，感谢啦
+3楼 拭心 2016-12-21 12:00发表 [回复] 效果不错，赞！Re: Hankkin 2016-12-21 16:05发表 [回复] 回复拭心：哈哈ths
+2楼 一叶飘舟 2016-12-21 11:36发表 [回复] 赞一个Re: Hankkin 2016-12-21 16:04发表 [回复] 回复一叶飘舟：谢李哥
+1楼 Young_Kai 2016-12-21 10:23发表 [回复] 沙发Re: Hankkin 2016-12-21 16:04发表 [回复] 回复Young_Kai：么么哒小宝贝
+您还没有登录,请[登录]或[注册]
+* 以上用户言论只代表其个人观点，不代表CSDN网站的观点或立场
+核心技术类目
+全部主题 Hadoop AWS 移动游戏 Java Android iOS Swift 智能硬件 Docker OpenStack VPN Spark ERP IE10 Eclipse CRM JavaScript 数据库 Ubuntu NFC WAP jQuery BI HTML5 Spring Apache .NET API HTML SDK IIS Fedora XML LBS Unity Splashtop UML components Windows Mobile Rails QEMU KDE Cassandra CloudStack FTC coremail OPhone  CouchBase 云计算 iOS6 Rackspace  Web App SpringSide Maemo Compuware 大数据 aptech Perl Tornado Ruby Hibernate ThinkPHP HBase Pure Solr Angular Cloud Foundry Redis Scala Django Bootstrap
+个人资料
+访问我的空间
+Hankkin
+
+ 3  1
+访问：211003次
+积分：2672
+等级：
+排名：第10864名
+原创：56篇转载：7篇译文：2篇评论：226条
+联系我
+
+Github主页:https://github.com/Hankkin
+
+QQ:1019283569
+我的微博
+
+博客专栏
+	Retrofit全面解析
+文章：4篇
+阅读：29510
+	Android 自定义篇
+文章：7篇
+阅读：49740
+	Android 高仿篇
+文章：8篇
+阅读：65769
+	Android 源码解析
+文章：8篇
+阅读：20225
+	专治Android疑难杂症
+文章：6篇
+阅读：13611
+文章分类
+android 开发(21)
+android 开发进阶(31)
+Java(2)
+环境搭建(3)
+版本控制工具(1)
+开发笔记(3)
+开发工具(3)
+Spring开发(1)
+评论排行
+Android自定义组合控件---教你如何自定义下拉刷新和左滑删除(29)
+Android 百度地图SDK 实现获取周边位置POI(18)
+Retrofit+OKHttp 教你怎么持久化管理Cookie(17)
+Android自定义下拉刷新动画--仿百度外卖下拉刷新(17)
+Retrofit--合理封装回调能让你的项目高逼格(15)
+【Android源码解析】选择多张图片上传多图预览(13)
+Android 高仿微信发朋友圈浏览图片效果(12)
+Android自定义View--自己撸一个柱状图也没那么难(11)
+Android--仿淘宝商品详情(继续拖动查看详情)及标题栏渐变(11)
+Android 高仿微信群聊头像(10)
+阅读排行
+Android 高仿微信发朋友圈浏览图片效果(17406)
+Retrofit+OKHttp 教你怎么持久化管理Cookie(15275)
+Android自定义下拉刷新动画--仿百度外卖下拉刷新(14128)
+Android自定义组合控件---教你如何自定义下拉刷新和左滑删除(11876)
+你真的会用Fragment了么？-Fragment解析(9740)
+一款基于Material Desgin设计的APP(7576)
+Android Studio导入github项目详解(6922)
+Android带你解析ScrollView--仿QQ空间标题栏渐变(6613)
+Android 高仿微信群聊头像(6472)
+Retrofit--合理封装回调能让你的项目高逼格(6161)
+
+公司简介|招贤纳士|广告服务|联系方式|版权声明|法律顾问|问题报告|合作伙伴|论坛反馈
+网站客服杂志客服微博客服webmaster@csdn.net400-600-2320|北京创新乐知信息技术有限公司 版权所有|江苏知之为计算机有限公司|江苏乐知网络技术有限公司
+京 ICP 证 09002463 号|Copyright © 1999-2016, CSDN.NET, All Rights Reserved GongshangLogo
+
