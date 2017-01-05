@@ -1,0 +1,667 @@
+http://blog.csdn.net/recordgrowth/article/details/53342976
+
+开源库【FreeRadioGroup】--淡出、自由拖动、自动贴边，类似于苹果的虚拟辅助按钮
+
+标签： 淡出自由拖动自动贴边
+2016-11-26 14:09 288人阅读 评论(1) 收藏 举报
+ 分类： Android（29）
+版权声明：本文为博主原创文章，未经博主允许不得转载。
+目录(?)[+]
+*本篇文章已授权微信公众号 guolin_blog （郭霖）独家发布
+*本篇文章已授权微信公众号 guolin_blog （郭霖）独家发布
+*本篇文章已授权微信公众号 guolin_blog （郭霖）独家发布
+
+demo演示
+
+这里写图片描述
+
+简单描述
+
+这个可自由拖动的RadioGroup 在松手后能自动贴合父布局的左侧或右侧并淡出，同时它对setOnCheckedChangeListener 没有造成影响。
+
+虽然它是个RadioGroup，但所用的思路和方法可以轻松地将任意的View或ViewGroup实现类似的功能。(有多简单？我会告诉你只要将继承的父类改一下就好了么……)
+
+由来
+
+项目中需要用demo中所示的三个选择来切换页面，我选择了用RadioGroup来做这个，本来也很顺利，轻松就搞定这个了。但作为追求用户体验的程序员，对这一坨黑黑的区域实在看不下去了，决定给它加个淡出功能。本来弄个onTouchListener就可以了，可是这和setOnCheckedChangeListener有冲突，触摸事件被子view消耗了，就不会进入onTouch方法中了，如果把事件拦截了，OnCheckedChange方法又会没用了。所以我想了一下，可以在RadioGroup的分发或拦截方法中实现淡出，但不消耗事件，继续向下分发，也就不会对OnCheckedChange方法造成影响。后来自定义了RadioGroup就一发不可收拾，决定干脆将它的功能做得更完善，否则我会睡不着的！于是，一个功能还算可以的FreeRadioGroup就诞生了~
+
+技术分析
+
+淡出
+
+我使用了定时器CountDownTimer，在初始化时开始倒计时：
+
+private void init(Context context, AttributeSet attrs) {
+    countDownTimer = new MyCountDownTimer(millisInFuture, countDownInterval);
+    countDownTimer.start();
+}
+1
+2
+3
+4
+1
+2
+3
+4
+在倒计时结束时改变透明度，实现淡出效果：
+
+ public class MyCountDownTimer extends CountDownTimer {
+
+        public MyCountDownTimer(long millisInFuture, long countDownInterval) {
+            super(millisInFuture, countDownInterval);
+        }
+
+        @Override
+        public void onTick(long millisUntilFinished) {
+        }
+
+        @Override
+        public void onFinish() {
+            setAlpha(toAlpha);
+        }
+    }
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+在分发事件中，手指按下时取消倒计时，同时恢复到不透明状态：
+
+case MotionEvent.ACTION_DOWN:
+      setAlpha(1f);
+      countDownTimer.cancel();
+      break;
+1
+2
+3
+4
+1
+2
+3
+4
+手指松开后，重新开始倒计时：
+
+case MotionEvent.ACTION_UP:
+     countDownTimer.start();
+     break;
+1
+2
+3
+1
+2
+3
+这样，就实现了触摸时不透明，松手后到达预定时间就淡出到预定透明度的效果。
+
+自由拖动
+
+我通过控制leftMargin和topMargin来实现拖动功能，按照以下步骤实现：
+
+在手指按下时，记录当前触摸点的绝对坐标和当前的margin：
+
+case MotionEvent.ACTION_DOWN:
+                setAlpha(1f);
+                countDownTimer.cancel();
+                if (moveable) {
+                    MarginLayoutParams lp = (MarginLayoutParams) getLayoutParams();
+                    currentX = ev.getRawX();
+                    currentY = ev.getRawY();
+                    currentLeft = lp.leftMargin;
+                    currentTop = lp.topMargin;
+                }
+                break;
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+手指移动过程中，计算出触摸点移动的距离，将算出的移动距离加上之前记录的margin值作为当前的margin并赋值，然后更新当前触摸点的绝对坐标，就可以实现跟随手指移动了。
+
+case MotionEvent.ACTION_MOVE:
+                if (moveable) {
+                    currentLeft += ev.getRawX() - currentX;
+                    currentTop += ev.getRawY() - currentY;
+                    lp.leftMargin = currentLeft;
+                    lp.topMargin = currentTop;
+                    setLayoutParams(lp);
+                    currentX = ev.getRawX();
+                    currentY = ev.getRawY();
+                }
+                break;
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+但是光这样还不够，因为没有控制好边界，会出现你不想看到的画面，哈哈。
+
+下面我们来控制移动边界，使其在合理的范围内移动。
+
+既然我是通过leftMargin和topMargin来实现拖动功能，就要分别算出这两个值的最小和最大值，使它们一直处于最小和最大值之间，边界问题自然就解决了。
+
+先来看我画的一张示意图：
+
+这里写图片描述
+
+如上图所示：我们要将移动范围控制在白色区域内，两个红色箭头所示的距离就是我们的控制手段。
+很明显，minLeftMargin就是左侧的蓝色距离，minTopMargin就是上部的蓝色距离，而最大值的计算请看以下代码，相信聪明的你一看就懂了。这些计算我放在onSizeChanged方法中（为什么？你懂的）：
+
+ @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        if (moveable) {
+            ViewGroup parentView = ((ViewGroup) getParent());
+            MarginLayoutParams lp = (MarginLayoutParams) getLayoutParams();
+            viewWidth = getRight() - getLeft();
+            viewHight = getBottom() - getTop();
+            parentWidth = parentView.getMeasuredWidth();
+            parentHeight = parentView.getMeasuredHeight();
+            minLeftMargin = lp.leftMargin;
+            leftPadding = parentView.getPaddingLeft();
+            rightDistance = lp.rightMargin + parentView.getPaddingRight();
+            maxLeftMargin = parentWidth - rightDistance - viewWidth - leftPadding;
+            minTopMargin = lp.topMargin;
+            topPadding = parentView.getPaddingTop();
+            bottomDistance = lp.bottomMargin + parentView.getPaddingBottom();
+            maxTopMargin = parentHeight - bottomDistance - viewHight - topPadding;
+        }
+    }
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+这样就获得了minLeftMargin、maxLeftMargin、minTopMargin、maxTopMargin这4个主要数值以及其他辅助数值。
+
+接下来就要在移动的过程中检查并控制在边界之内：
+
+case MotionEvent.ACTION_MOVE:
+                if (moveable) {
+                    currentLeft += ev.getRawX() - currentX;
+                    currentTop += ev.getRawY() - currentY;
+                    //判断左边界
+                    currentLeft = currentLeft < minLeftMargin ? minLeftMargin : currentLeft;
+                    //判断右边界
+                    currentLeft = (leftPadding + currentLeft + viewWidth + rightDistance) > parentWidth ? maxLeftMargin : currentLeft;
+                    //判断上边界
+                    currentTop = currentTop < minTopMargin ? minTopMargin : currentTop;
+                    //判断下边界
+                    currentTop = (topPadding + currentTop + viewHight + bottomDistance) > parentHeight ? maxTopMargin : currentTop;
+                    MarginLayoutParams lp = (MarginLayoutParams) getLayoutParams();
+                    lp.leftMargin = currentLeft;
+                    lp.topMargin = currentTop;
+                    setLayoutParams(lp);
+                    currentX = ev.getRawX();
+                    currentY = ev.getRawY();
+                }
+                break;
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+这样不管怎么拖动，始终在合理的边界中，拖起来就更爽了！
+
+松手后贴边
+
+我只做了左右贴边，简单地判断了下松手时距离父布局左右距离的大小来决定贴左侧还是右侧。
+
+因为我们已经有了minLeftMargin和maxLeftMargin，所以这个就简单了，只需要将minLeftMargin或maxLeftMargin作为松手后的leftMargin就可以了。
+
+但是这样直接赋值效果会很突兀，突然出现在侧边了。于是，我们给它加个属性动画，慢慢地回到侧边。
+
+首先写一个包装类：
+
+    class Wrapper {
+        private ViewGroup mTarget;
+
+        public Wrapper(ViewGroup mTarget) {
+            this.mTarget = mTarget;
+        }
+
+        public int getLeftMargin() {
+            MarginLayoutParams lp = (MarginLayoutParams) mTarget.getLayoutParams();
+            return lp.leftMargin;
+        }
+
+        public void setLeftMargin(int leftMargin) {
+            MarginLayoutParams lp = (MarginLayoutParams) mTarget.getLayoutParams();
+            lp.leftMargin = leftMargin;
+            mTarget.requestLayout();
+        }
+    }
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+这个包装类会告诉系统对leftMargin这个属性该干什么，在里面我们对leftMargin赋予新值并重绘，随着时间的推移，leftMargin不断改变，从而实现动画效果。
+
+接着在手指放开后，判断左右距离，利用这个包装类，开始500ms的动画：
+
+case MotionEvent.ACTION_UP:
+                countDownTimer.start();
+                if (moveable && autoBack) {
+                    MarginLayoutParams lp = (MarginLayoutParams) getLayoutParams();
+                    int fromLeftMargin = lp.leftMargin;
+                    if (getLeft() < (parentWidth - getLeft() - viewWidth)) {
+                        lp.leftMargin = minLeftMargin;
+                    } else {
+                        lp.leftMargin = maxLeftMargin;
+                    }
+                    ObjectAnimator marginChange = ObjectAnimator.ofInt(new Wrapper(this), "leftMargin", fromLeftMargin, lp.leftMargin);
+                    marginChange.setDuration(500);
+                    marginChange.start();
+                }
+                break;
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+你会发现、你会讶异，它就这样回到了侧边~~~
+
+深藏功与名
+
+要知道，我们这些功能是写在分发事件中的，可不能因此导致子view某些功能失效。因此最后别忘了加这么一句：
+
+        return super.dispatchTouchEvent(ev);
+1
+2
+1
+2
+就这样，深藏功与名，假装自己什么都没干，你的子View们啥也母鸡，哈哈哈。
+
+库使用方法
+
+在项目的根 build.gradle 文件中添加：
+allprojects {
+    repositories {
+        ...
+        maven { url "https://jitpack.io" }
+    }
+}
+1
+2
+3
+4
+5
+6
+1
+2
+3
+4
+5
+6
+在模块中添加依赖：
+compile 'com.github.Sbingo:FreeRadioGroup:v1.0.0'
+1
+1
+在xml布局文件中使用（有4个可配置选项）：
+ <sbingo.freeradiogroup.FreeRadioGroup
+        android:id="@+id/group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginRight="5dp"
+        android:background="@drawable/black_bg"
+        app:autoBack="true"           //松手后是否自动回到父布局左侧或右侧
+        app:millisInFuture="2500"     //从松手到淡出的时间
+        app:toAlpha="0.3"             //淡出结束的透明度值
+        app:moveable="true">          //是否能拖动
+        <RadioButton
+            .....
+            />
+            .
+            .
+            .
+        <RadioButton
+            .....
+            />
+</sbingo.freeradiogroup.FreeRadioGroup>
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+完整源码和demo点这里
+
+如果觉得有用，不妨顺手点个Star，谢谢。
+
+顶
+3
+
+踩
+0
+
+
+上一篇开源库【CustomPopupWindow】---想怎么弹就怎么弹
+下一篇64k导致的百度地图NoClassDefFoundError
+我的同类文章
+Android（29）
+•开源项目【LikeCloudMusic 云音】仿网易云音乐2016-12-31阅读121
+•开源库【CustomPopupWindow】---想怎么弹就怎么弹2016-11-12阅读93
+•RxJava+Retrofit+OkHttp组合在网络请求中的简单配置2016-10-22阅读90
+•JS交互中的线程间协作浅析2016-08-31阅读65
+•Base64上传图片2016-08-23阅读144
+•开源库【ViewPagerIndicator】配合ViewPager使用的圆点指示器，圆点随滑动而移动2016-12-24阅读86
+•华为手机打开log.v和log.d2016-10-22阅读39
+•真机上使用Hierarchy Viewer2016-09-22阅读159
+•【Google官方译文】Styles and Themes2016-08-25阅读674
+•百度地图SHA1值2016-08-14阅读61
+更多文章
+
+
+参考知识库
+img
+Android知识库
+29080关注|2439收录
+img
+微信开发知识库
+16048关注|620收录
+猜你在找
+【Android APP开发】Android高级商业布局快速实现移动APP测试基础到进阶移动手机APP测试从零开始（初级篇）Android App性能调优、内存泄露检测Android APP开发之真机调试环境实现
+登录按钮点击之后本页出现一个小的页面类似于弹窗popwindows 类似于京东阅读主页title两侧按钮类似于coc点击好友列表右侧显示的visit等功能按钮的view的处理方法安卓自定义View----且看如何巧妙地实现一个类似于电视遥控板的环形按钮效果上java基础class文件由虚拟机的解释器解释为机器码这个机器码是给JVM执行的机器码还是类似于exe给操作系统执行的机器码
+
+
+关闭
+
+
+查看评论
+1楼 qq_36114386 2016-12-03 08:57发表 [回复] 感谢作者分享，辛苦了
+您还没有登录,请[登录]或[注册]
+* 以上用户言论只代表其个人观点，不代表CSDN网站的观点或立场
+核心技术类目
+全部主题 Hadoop AWS 移动游戏 Java Android iOS Swift 智能硬件 Docker OpenStack VPN Spark ERP IE10 Eclipse CRM JavaScript 数据库 Ubuntu NFC WAP jQuery BI HTML5 Spring Apache .NET API HTML SDK IIS Fedora XML LBS Unity Splashtop UML components Windows Mobile Rails QEMU KDE Cassandra CloudStack FTC coremail OPhone  CouchBase 云计算 iOS6 Rackspace  Web App SpringSide Maemo Compuware 大数据 aptech Perl Tornado Ruby Hibernate ThinkPHP HBase Pure Solr Angular Cloud Foundry Redis Scala Django Bootstrap
+个人资料
+访问我的空间
+Sbingo_666
+
+访问：6406次
+积分：386
+等级：
+排名：千里之外
+原创：31篇转载：0篇译文：1篇评论：9条
+文章搜索
+
+ 搜索
+文章分类
+Android(30)
+文章存档
+2016年12月(2)
+2016年11月(3)
+2016年10月(2)
+2016年09月(1)
+2016年08月(7)
+展开
+阅读排行
+Android动画四：View的animate方法 (ViewPropertyAnimator)(1349)
+【Google官方译文】Styles and Themes(674)
+SVG在低版本ImageView中的兼容(489)
+Activity的启动模式与标志位(383)
+充值画面——金额的选择和输入(307)
+开源库【FreeRadioGroup】--淡出、自由拖动、自动贴边，类似于苹果的虚拟辅助按钮(283)
+Android 截屏并保存至相册(256)
+自定义滑块验证View(208)
+真机上使用Hierarchy Viewer(159)
+一种两位小数点数字输入的控制方法(155)
+评论排行
+【Google官方译文】Styles and Themes(4)
+充值画面——金额的选择和输入(2)
+自定义滑块验证View(1)
+开源项目【LikeCloudMusic 云音】仿网易云音乐(1)
+开源库【FreeRadioGroup】--淡出、自由拖动、自动贴边，类似于苹果的虚拟辅助按钮(1)
+Activity的启动模式与标志位(0)
+Android动画四：View的animate方法 (ViewPropertyAnimator)(0)
+Android动画三：属性动画 (property animation)(0)
+Android动画二：View动画(0)
+时间戳转换(0)
+推荐文章
+* Android 反编译初探 应用是如何被注入广告的
+* 凭兴趣求职80%会失败，为什么
+* 安卓微信自动抢红包插件优化和实现
+* 【游戏设计模式】之四 《游戏编程模式》全书内容提炼总结
+* 带你开发一款给Apk中自动注入代码工具icodetools(完善篇)
+最新评论
+充值画面——金额的选择和输入
+西瓜不知柠檬酸: 代码放上面
+开源项目【LikeCloudMusic 云音】仿网易云音乐
+13期-李天贵: 太6了。
+开源库【FreeRadioGroup】--淡出、自由拖动、自动贴边，类似于苹果的虚拟辅助按钮
+qq_36114386: 感谢作者分享，辛苦了
+【Google官方译文】Styles and Themes
+liut_2015: 学习了,谢谢
+【Google官方译文】Styles and Themes
+silingcanggui: 学习了，作者辛苦
+【Google官方译文】Styles and Themes
+容华谢后: 学习了
+【Google官方译文】Styles and Themes
+joyment2010: 从郭神那里看到了，书签保存，给作者点赞，辛苦了。
+自定义滑块验证View
+啦啦啦哦哦哦哦哦: 谢谢大神
+充值画面——金额的选择和输入
+SvenHe: 没代码，你说个JB
+
+公司简介|招贤纳士|广告服务|联系方式|版权声明|法律顾问|问题报告|合作伙伴|论坛反馈
+网站客服杂志客服微博客服webmaster@csdn.net400-600-2320|北京创新乐知信息技术有限公司 版权所有|江苏知之为计算机有限公司|江苏乐知网络技术有限公司
+京 ICP 证 09002463 号|Copyright © 1999-2016, CSDN.NET, All Rights Reserved GongshangLogo
+

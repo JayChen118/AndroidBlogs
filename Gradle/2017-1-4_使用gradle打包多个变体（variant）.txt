@@ -1,0 +1,160 @@
+http://www.jianshu.com/p/843055bf6edd
+
+搜索
+[06]——使用gradle打包多个变体（variant）
+05d5b6b2f93c  作者 junerver 关注
+2016.12.02 10:04 字数 1550 阅读 362 评论 10 喜欢 8
+背景：刚刚接手的项目中包含3个客户端app（两个eclipse工程、一个AS工程），同时这个项目根据不同用户的制定还有两个衍生版本。原来的开发人员将项目复制后修改，在我接手时一共存在着9个工程文件。
+当我看到这个项目的时候近乎崩溃，因为这意味着每修改一个端的内容还要记着同步到其他的两个端中。查看后发现，衍生版本中大量的文件是重复的，只是部分比如资源文件、后台接口地址等是不同的。我便开始思考，如何通过一个Android Studio工程同时实现修改这三个版本。
+
+于是便想到了曾看过stormzhang写过的ANDROID STUDIO系列教程六--GRADLE多渠道打包，这篇文章中简单描述了如何使用gradle进行多渠道打包（使用占位符替换AndroidManifest文件中友盟统计的UMENG_CHANNEL的值）。
+
+这给了我一定的思路，通过查阅资料，确定了可以使用gradle打包出不同变体（不同applicationId、不同资源文件、不同APP名称与图标、不同Java文件）。
+
+长篇讲解可以查看文章末尾的参考阅读，本文只介绍如何实现。
+
+1 配置不同变体的属性（签名、applicationId）
+由于项目中每个客户端都相当于存在三个版本，使用不同的签名文件，因此需要首先实现的就是对不同的变体配置不同的签名！
+
+
+配置签名文件
+如上图所示，选择app module，选择Signing选项卡，首先配置好了这三个变体版本的签名文件。
+
+
+配置变体Flavors
+在Flavors选项卡中，新建我们的变体（variant），并对变体进行配置！所有的Flavor都会复写defaultConfig中的属性，所以可以看到我并没有填写其中的一些属性。在这里还可以对不同的变体设置不同的applicationId（重要！这与极光推送等第三方SDK有关）。
+
+创建完毕后同步项目，会发现app moudle下的build.gradle文件内容也发生了变化，如下图所示：
+
+
+Paste_Image.png
+如果你可以熟练的使用gradle也可以选择不使用AS提供的UI界面，直接编写gradle文件。
+
+2 新建不同变体的sourceSet
+在修改完变体的配置文件后，我们还需要再项目的src文件夹下新建以我们的Flavor名称命名的文件夹，并在这些文件夹下新建如main中相同的目录结构。
+
+
+目录结构
+我们正常编写项目都是写在main这个sourceSet下的，但是如果我们的项目的变体有不同的资源文件、Java文件时，我们就需要使用不同的sourceSet来区别开。
+
+需要注意的是，如果是资源文件，Flavor下的资源文件会与main中的合并，如果存在重复，则Flavor中优先级高于main中。我们可以将不同变体中共用的资源存放在main中，只将不同的内容存放在flavor的sourceSet中。
+
+如果不同变体有内容不同的Java文件则需要注意，main中不可以有这个Java文件，如果main中也存在此文件，编译时会提示文件重复。同时这个Java文件在flavor中要按照main中的包结构保存。
+
+3 AndroidManifest占位符
+由于不同的项目有不同的名称、图标，这一点我们可以通过类似上一步的方法，在不同的sourceSet中配置string.xml中的app_name属性，与drawable文件夹中的ic_launcher。但是这样有些麻烦，当我们的变体版本多了得手就需要不断的重复这一动作，所以我使用的是在AndroidManifest文件中使用占位符然后在flavor中直接配置的方法。这样做的好处是，如果以后图标变更只需要到main中找到该文件然后替换即可，而不用去一个个找sourceSet。
+
+首先将所有图标文件放到main中，然后在 AndroidManifest中使用￥{NAME}格式的占位符，最后在flavor中使用manifestPlaceholders =[NAME1:VALUE1,NAME2:VALUE2]替换占位符中的内容。
+
+
+AndroidManifest占位符
+在项目中，每个衍生版本都有自己的极光推送APPKEY属性，这也可以是用占位符这一方法来处理，最终的flavors如下图所示：
+
+
+gradle文件
+4 调试不同版本
+现在我们拥有了三个不同的变体，但是我们调试的时候如何选择对应的程序来调试呢？
+
+方式一：
+
+
+方式一
+方式二：
+
+
+方式二
+在选择好要调试的变体后，会发现对应的 sourceSet 文件夹变成了我们工程文件夹的央视：
+
+
+选择需要调试的变体
+可以看到我们一共有6个可选变体，这是怎么回事呢？我们明明只设置了3个flavor。
+
+这时就需要介绍buildTypes了，再次回到项目配置页面如下图所示：
+
+
+buildTypes
+可以看到有两个build type，这其中可以配置构建的一些选项，这里就不做过多介绍了。
+
+我们的总变体数量等于 （build type数量）*（flavor数量），这就是为什么一共有六个可选的variant。
+
+最后献上一个release的buildType配置
+
+release {
+    minifyEnabled true
+    shrinkResources true       //移除无用资源
+    debuggable false
+    zipAlignEnabled true        //Zipalign优化
+    proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    signingConfig signingConfigs.uerbT
+    // 自定义输出配置
+    applicationVariants.all { variant ->
+        variant.outputs.each { output ->
+            def outputFile = output.outputFile
+            if (outputFile != null && outputFile.name.endsWith('.apk')) {
+                // 输出apk名称为UerbT_v1.0_2016-12-01_uerbt.apk
+                def fileName = "UerbT_v${variant.versionName}_${releaseTime()}_${variant.flavorName}.apk"
+                output.outputFile = new File(outputFile.parent, fileName)
+            }
+        }
+        //过滤掉unaligned的包
+        variant.assemble.doLast {
+            variant.outputs.each { output ->
+                println "-----------------------------------------"
+                println "aligned " + output.outputFile
+                println "unaligned " + output.packageApplication.outputFile
+                File unaligned = output.packageApplication.outputFile;
+                File aligned = output.outputFile
+                if (!unaligned.getName().equalsIgnoreCase(aligned.getName())) {
+                    println "deleting " + unaligned.getName()
+                    unaligned.delete()
+                }
+            }
+        }
+    }
+}
+releaseTime() 函数如下：
+
+def releaseTime() {
+    return new Date().format("yyyy-MM-dd", TimeZone.getTimeZone("UTC"))
+}
+参考阅读：
+重要-Gradle for Android 第四篇( 构建变体 )
+重要 - 使用gradle构建不同特性的app
+gradle配置详解
+知乎问答-如何使用gradle构建不同的app
+android studio gradle 多版本多apk打包
+使用Gradle自动化构建多类型apk包
+外包采用Gradle生成多套app打包
+ANDROID STUDIO系列教程六--GRADLE多渠道打包
+Android Studio中Gradle使用详解
+
+ Android笔记 © 著作权归作者所有
+如果觉得我的文章对您有用，请随意打赏。您的支持将鼓励我继续创作！
+
+打赏支持
+喜欢  8    更多分享
+ 登录 后发表评论
+10条评论 只看作者 按时间正序按时间倒序按喜欢排序
+ r17171709
+2楼 · 2017.01.04 08:35
+可以提供下你build.gradle下sourceSet的配置吗？
+ 赞  回复
+junerver：build.gradle 中没有 sourceSet 的配置，sourceSet 是资源集，如果配置的不同 flavor 有不同的 Java 文件或者不同的资源文件，就需要在main文件的同级目录下，按照 flavor 的名称创建 sourceSet。最终这个 flavor 的 sourceSet 会与 main 文件夹下的内容合并成完整的工程，这也就是为什么如果存 flavor 在不同的 Java 文件，main 文件夹下不能存放此文件，需要放到各个 flavor 的 sourceSet 中。
+2017.01.05 12:43 回复
+r17171709：@junerver 嗯，我昨天后来试过了，直接productFlover配置就出现了
+2017.01.05 12:46 回复
+添加新评论
+ 白衣雨果
+3楼 · 2017.01.04 14:53
+第二步，新建不同变体的sourceSet
+这个是如何创建的
+ 赞  回复
+junerver：@白衣雨果 为方便理解重新上传了图片，请仔细阅读此段，不同的sourceSet就是在main文件夹同级的不同文件夹
+2017.01.04 17:24 回复
+白衣雨果：不同的sourceSet目录可以创建，只是不太明白那些类是如何创建的，因为这些文件夹中跟main文件夹还是有区别的，不能直接创建java文件。我在新sourceSet目录下创建activity类后，会报错。楼主可以把创建sourceSet的过程贴上来一下么，其他的步骤都挺清晰的，就这个步骤没实践出来。
+2017.01.05 10:23 回复
+junerver：@白衣雨果 sourceSet下的java文件不能与main中重复，比如说有两个变体，有着不同的MainActivity.java，那么 main中就不能有这个文件了。需要把这个java文件放到相同目录结构的sourceSet下，这时文件上会显示成错误的样子，然后选好你要调试的variant，就可以了，请继续向下看，调试那一节有。
+2017.01.05 12:31 回复
+添加新评论 还有3条评论， 展开查看
+被以下专题收入，发现更多相似内容
+Android知识 Android... Android开发 手机移动程序开发
