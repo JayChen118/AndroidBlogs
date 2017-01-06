@@ -1,0 +1,27 @@
+
+http://blog.sina.com.cn/s/blog_9f3cecc50101gw7l.html
+
+android 快速去掉HTML标签
+(2013-06-15 17:31:33)转载▼
+标签： android html标签 it
+在平时的开发过程中，有时候我们从网络获取到的数据可能包含有一些html 标签 ,我们用TextView来显示的时候，我们可以通过Html来将html直接转化成 Spanned来显示。
+
+如：
+
+textView.setText(Html.fromHtml(content.getTitle()));
+
+
+
+
+但是也有时候，我们不想显示出html里面的标签 ，比如说等等 。（也就是显示出来的时候，去掉里面的连接，没有上图中的绿色字体）。又该如何办呢？
+
+一般的思路，我们可以是找到html中的标签，比如
+
+等等 ，然后去掉里面的标签就行了。但是往往许多人觉得这样非常的麻烦。
+在这里我给大家介绍一种更加便捷的方法：
+
+
+
+代码如下：
+
+textView.setText(Html.fromHtml(content.getTitle()).toString());
